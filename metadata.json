@@ -1,0 +1,5 @@
+{
+  "name": "SNI Domain Checker",
+  "description": "Real-time SNI domain scanner with ISP detection, SSL check, and data bypass status.",
+  "requestFramePermissions": []
+}
