@@ -26,6 +26,22 @@ export default function App() {
   const [bulkResults, setBulkResults] = useState([]);
   const [autoResults, setAutoResults] = useState([]);
   const [autoLoading, setAutoLoading] = useState(false);
+  const [serverStatus, setServerStatus] = useState('checking');
+
+  React.useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        const res = await fetch('/api/health');
+        if (res.ok) setServerStatus('online');
+        else setServerStatus('error');
+      } catch (e) {
+        setServerStatus('offline');
+      }
+    };
+    checkHealth();
+    const interval = setInterval(checkHealth, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const addLog = (msg) => {
     setLogs(prev => [...prev.slice(-9), `[${new Date().toLocaleTimeString()}] ${msg}`]);
@@ -38,13 +54,19 @@ export default function App() {
   };
 
   const safeFetch = async (url, options) => {
-    const res = await fetch(url, options);
-    const contentType = res.headers.get("content-type");
-    if (contentType && contentType.indexOf("application/json") !== -1) {
-      return { data: await res.json(), ok: res.ok };
-    } else {
-      const text = await res.text();
-      return { error: `Server returned non-JSON response: ${text.substring(0, 100)}...`, ok: false };
+    try {
+      const res = await fetch(url, options);
+      const contentType = res.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        return { data: await res.json(), ok: res.ok };
+      } else {
+        const text = await res.text();
+        console.error(`Non-JSON response from ${url}:`, text);
+        return { error: `Server returned non-JSON response: ${text.substring(0, 100)}...`, ok: false };
+      }
+    } catch (e) {
+      console.error(`Fetch error for ${url}:`, e);
+      return { error: `Network error: ${e.message}`, ok: false };
     }
   };
 
@@ -177,8 +199,10 @@ export default function App() {
 
       {/* Header */}
       <div className="relative z-10 text-center mb-8">
-        <div className="inline-block px-3 py-1 border border-green-500/30 rounded-full mb-4 bg-green-500/5">
-          <span className="text-[8px] tracking-[0.5em] text-green-500 font-black uppercase">System Online • Secure Connection</span>
+        <div className={`inline-block px-3 py-1 border rounded-full mb-4 bg-opacity-5 ${serverStatus === 'online' ? 'border-green-500/30 bg-green-500' : serverStatus === 'offline' ? 'border-red-500/30 bg-red-500' : 'border-yellow-500/30 bg-yellow-500'}`}>
+          <span className={`text-[8px] tracking-[0.5em] font-black uppercase ${serverStatus === 'online' ? 'text-green-500' : serverStatus === 'offline' ? 'text-red-500' : 'text-yellow-500'}`}>
+            System {serverStatus} • {serverStatus === 'online' ? 'Secure Connection' : 'Check Server Logs'}
+          </span>
         </div>
         <h1 className="text-4xl md:text-6xl font-black text-green-400 tracking-[0.3em] mb-4 drop-shadow-[0_0_20px_rgba(34,197,94,0.6)]">
           SNI MASTER

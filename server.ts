@@ -3,40 +3,32 @@ import { createServer as createViteServer } from "vite";
 import { scanDomain } from "./src/lib/scanner.js";
 import { getISPInfo } from "./src/lib/ispDetector.js";
 import dns from 'dns/promises';
+import fs from 'fs';
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode...`);
+
   app.use(express.json());
+
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", env: process.env.NODE_ENV, time: new Date().toISOString() });
+  });
 
   // API routes
   app.post("/api/check", async (req, res) => {
+    console.log(`POST /api/check - ${req.body?.domain}`);
     try {
       const { domain } = req.body;
-
       if (!domain || typeof domain !== "string") {
         return res.status(400).json({ error: "Domain required" });
       }
-
-      // Clean domain — https:// aur trailing slash remove karo
-      const clean = domain
-        .replace(/^https?:\/\//, "")
-        .replace(/\/.*$/, "")
-        .toLowerCase()
-        .trim();
-
-      if (!clean || clean.length < 3) {
-        return res.status(400).json({ error: "Invalid domain format" });
-      }
-
-      // Real HTTPS scan karo
+      const clean = domain.replace(/^https?:\/\//, "").replace(/\/.*$/, "").toLowerCase().trim();
       const scanResult = await scanDomain(clean);
-
-      // ISP detect karo domain + IP se
       const ispInfo = await getISPInfo(clean, scanResult.ip);
-
-      // Final response
       return res.json({
         ...scanResult,
         isp: ispInfo.isp,
@@ -180,13 +172,18 @@ async function startServer() {
   });
 
   // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+  const isProd = process.env.NODE_ENV === "production";
+  const hasDist = fs.existsSync("./dist");
+
+  if (!isProd || !hasDist) {
+    console.log("Using Vite middleware (Development/Fallback mode)...");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
+    console.log("Serving static files from dist (Production mode)...");
     app.use(express.static("dist"));
     app.get("*", (req, res) => {
       res.sendFile("dist/index.html", { root: "." });
@@ -198,4 +195,7 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error("CRITICAL: Failed to start server:", err);
+  process.exit(1);
+});
