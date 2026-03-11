@@ -37,6 +37,17 @@ export default function App() {
     localStorage.setItem('sni_history', JSON.stringify(newHistory));
   };
 
+  const safeFetch = async (url, options) => {
+    const res = await fetch(url, options);
+    const contentType = res.headers.get("content-type");
+    if (contentType && contentType.indexOf("application/json") !== -1) {
+      return { data: await res.json(), ok: res.ok };
+    } else {
+      const text = await res.text();
+      return { error: `Server returned non-JSON response: ${text.substring(0, 100)}...`, ok: false };
+    }
+  };
+
   const checkDomain = async (targetDomain = domain) => {
     const cleanDomain = targetDomain.trim();
     if (!cleanDomain) return;
@@ -49,16 +60,16 @@ export default function App() {
     addLog(`Resolving DNS...`);
 
     try {
-      const res = await fetch('/api/check', {
+      const { data, error, ok } = await safeFetch('/api/check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ domain: cleanDomain }),
       });
 
-      addLog(`HTTPS Handshake initiated...`);
-      const data = await res.json();
+      if (error) throw new Error(error);
 
-      if (!res.ok) throw new Error(data.error || 'Scan failed');
+      addLog(`HTTPS Handshake initiated...`);
+      if (!ok) throw new Error(data?.error || 'Scan failed');
       
       addLog(`ISP Detected: ${data.isp}`);
       addLog(`Status: ${data.httpStatus.label}`);
@@ -83,14 +94,14 @@ export default function App() {
     addLog(`Starting subdomain discovery for: ${domain}`);
 
     try {
-      const res = await fetch('/api/subdomains', {
+      const { data, error, ok } = await safeFetch('/api/subdomains', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ domain: domain.trim() }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Discovery failed');
+      if (error) throw new Error(error);
+      if (!ok) throw new Error(data?.error || 'Discovery failed');
       
       addLog(`Found ${data.subdomains.length} active subdomains.`);
       setSubdomains(data.subdomains);
@@ -141,13 +152,13 @@ export default function App() {
     addLog(`Detecting user ISP and scanning for compatible SNIs...`);
 
     try {
-      const res = await fetch('/api/auto-discover', {
+      const { data, error, ok } = await safeFetch('/api/auto-discover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Discovery failed');
+      if (error) throw new Error(error);
+      if (!ok) throw new Error(data?.error || 'Discovery failed');
       
       addLog(`ISP Detected: ${data.isp}`);
       addLog(`Scan complete. Found ${data.found} working SNIs.`);
